@@ -13,6 +13,10 @@ const subscriptionSchema = new mongoose.Schema(
 			ref: "Plan",
 			required: true,
 		},
+		razorpayPlanId: {
+			type: String,
+			required: true,
+		},
 
 		razorpaySubscriptionId: {
 			type: String,

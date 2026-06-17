@@ -49,3 +49,24 @@ export const subscribe = async (payload) => {
 		throw error;
 	}
 };
+
+export const verify = async (payload) => {
+	try {
+		const { data } = await api.post(`/api/ecommerce/verify-payment`, payload);
+		return data;
+	} catch (error) {
+		throw error;
+	}
+};
+
+export const verifySubscription = async (payload) => {
+	try {
+		const { data } = await api.post(
+			`/api/ecommerce/verify-subscription`,
+			payload
+		);
+		return data;
+	} catch (error) {
+		throw error;
+	}
+};

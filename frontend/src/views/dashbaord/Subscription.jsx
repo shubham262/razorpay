@@ -4,72 +4,35 @@ import React, { useState, useEffect, useCallback } from "react";
 import { Card, Button, Typography, Switch, message, Divider, Tag } from "antd";
 import { FaCheck } from "react-icons/fa";
 import { SiRazorpay, SiStripe } from "react-icons/si";
-import { fetchPlans, subscribe } from "@/service/razorpayService";
+import { fetchPlans, subscribe, verifySubscription } from "@/service/razorpayService";
+import PaymentVerifyModal from "@/components/dashboard/PaymentsVerifyModal";
 
 const { Title, Text } = Typography;
 
-const dummyPlans = [
-	{
-		_id: "plan_basic_123",
-		name: "Basic Access",
-		description: "Essential access to the core curriculum and community.",
-		features: ["Full Stack Course Access", "Community Support", "Weekly Q&A"],
-		pricingOptions: [
-			{
-				interval: "month",
-				price: 200000,
-				stripePriceId: "price_basic_mo_xxx",
-			},
-			{
-				interval: "year",
-				price: 2000000,
-				stripePriceId: "price_basic_yr_xxx",
-			},
-		],
-	},
-	{
-		_id: "plan_pro_456",
-		name: "PW Pro",
-		description:
-			"Unlock complete access to all advanced architectural modules.",
-		features: [
-			"Everything in Basic",
-			"Advanced System Design",
-			"1-on-1 Mentorship",
-			"Code Reviews",
-		],
-		pricingOptions: [
-			{
-				interval: "month",
-				price: 500000,
-				stripePriceId: "price_pro_mo_xxx",
-			},
-			{
-				interval: "year",
-				price: 5000000,
-				stripePriceId: "price_pro_yr_xxx",
-			},
-		],
-	},
-];
-
 const Subscription = () => {
 	const [billingInterval, setBillingInterval] = useState("month");
-	const [plans, setPlans] = useState(dummyPlans || []);
+	const [plans, setPlans] = useState([]);
 	const [loadingPlanId, setLoadingPlanId] = useState(null);
+	const [info, setInfo] = useState({
+		isOpen: false,
+		status: "verifying", //verifying,success, failed
+	});
+	useEffect(() => {
+		getPlans();
+	}, []);
 
-	// useEffect(() => {
-	// 	getPlans();
-	// }, []);
+	const handleClose = () => {
+		setInfo((prev) => ({ ...prev, isOpen: false, status: "verifying" }));
+	};
 
-	// const getPlans = useCallback(async () => {
-	// 	try {
-	// 		const response = await fetchPlans();
-	// 		setPlans(response?.plans || []);
-	// 	} catch (error) {
-	// 		message.error("Something went wrong");
-	// 	}
-	// }, []);
+	const getPlans = useCallback(async () => {
+		try {
+			const response = await fetchPlans();
+			setPlans(response?.plans || []);
+		} catch (error) {
+			message.error("Something went wrong");
+		}
+	}, []);
 
 	const handleSubscribe = async (plan) => {
 		setLoadingPlanId(plan._id);
@@ -80,7 +43,59 @@ const Subscription = () => {
 			};
 
 			const response = await subscribe(payload);
-			window.location.href = response?.url;
+			console.log("response", response);
+			const { description, name, razorpaySubscriptionId } = response || {};
+
+			const options = {
+				key: process.env.NEXT_PUBLIC_RAZORPAY_API_KEY,
+
+				name,
+				description,
+				subscription_id: razorpaySubscriptionId,
+
+				theme: {
+					color: "#F37254",
+				},
+
+				handler: async (response) => {
+					try {
+						setInfo((prev) => ({ ...prev, isOpen: true, status: "verifying" }));
+						const verifyResponse = await verifySubscription({ ...response });
+						const { success, message: msg } = verifyResponse || {};
+						if (success) {
+							message.success("Order Sucessfull");
+							setInfo((prev) => ({
+								...prev,
+								status: "success",
+							}));
+							setTimeout(() => {
+								setInfo((prev) => ({
+									...prev,
+									status: "verifying",
+									isOpen: false,
+								}));
+							}, 5000);
+						} else {
+							message.error(msg || "Something went wrong");
+							setInfo((prev) => ({
+								...prev,
+								status: "failed",
+							}));
+							setTimeout(() => {
+								setInfo((prev) => ({ ...prev, isOpen: false }));
+							}, 5000);
+						}
+					} catch (error) {
+						console.log("error==>verify", error);
+						setTimeout(() => {
+							setInfo((prev) => ({ ...prev, isOpen: false }));
+						}, 5000);
+					}
+				},
+			};
+
+			const rzp = new window.Razorpay(options);
+			rzp.open();
 
 			message.success(
 				`Redirecting to Razorpay for ${plan.name} (${billingInterval}ly)...`
@@ -139,9 +154,7 @@ const Subscription = () => {
 							(opt) => opt.interval === billingInterval
 						);
 						// Format paise to standard INR
-						const formattedPrice = (activePricing.price / 100).toLocaleString(
-							"en-IN"
-						);
+						const formattedPrice = activePricing.price.toLocaleString("en-IN");
 
 						return (
 							<Card
@@ -224,6 +237,12 @@ const Subscription = () => {
 					RazorPay
 				</p>
 			</div>
+
+			<PaymentVerifyModal
+				isOpen={info?.isOpen}
+				status={info?.status}
+				onClose={handleClose}
+			/>
 		</div>
 	);
 };

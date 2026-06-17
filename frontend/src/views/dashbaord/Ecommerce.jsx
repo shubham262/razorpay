@@ -1,7 +1,8 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 /* eslint-disable react-hooks/immutability */
 "use client";
-import { checkout, fetchProducts } from "@/service/razorpayService";
+import PaymentVerifyModal from "@/components/dashboard/PaymentsVerifyModal";
+import { checkout, fetchProducts, verify } from "@/service/razorpayService";
 import { message, Button, Card, Typography, List, Divider, Empty } from "antd";
 import React, { useCallback, useEffect, useState } from "react";
 import { FaShoppingCart, FaTrash } from "react-icons/fa";
@@ -14,6 +15,8 @@ const Ecommerce = () => {
 		products: [],
 		cart: [],
 		loadingCheckout: false,
+		isOpen: false,
+		status: "verifying", //verifying,success, failed
 	});
 
 	useEffect(() => {
@@ -49,25 +52,83 @@ const Ecommerce = () => {
 
 	const cartTotalCents = info?.cart.reduce((acc, curr) => acc + curr.price, 0);
 
+	const handleClose = () => {
+		setInfo((prev) => ({ ...prev, isOpen: false, status: "verifying" }));
+	};
+
 	const handleCheckout = async () => {
 		if (info?.cart.length === 0) {
 			message.error("Please add at least one course to checkout.");
 			return;
 		}
-		const payload = {
-			items: [...info?.cart],
-		};
-		const response = await checkout(payload);
-		window.location.href = response?.url;
 
-		setLoadingCheckout(true);
 		try {
 			message.info("Redirecting to Razorpay Secure Checkout...");
+			const payload = {
+				items: [...info?.cart],
+			};
+			const response = await checkout(payload);
+
+			const { amount, razorpayOrderId, currency } = response || {};
+
+			const options = {
+				key: process.env.NEXT_PUBLIC_RAZORPAY_API_KEY,
+				amount,
+				currency,
+				name: "PW SKills",
+				description: "Test Transaction",
+				order_id: razorpayOrderId,
+
+				theme: {
+					color: "#F37254",
+				},
+
+				handler: async (response) => {
+					try {
+						setInfo((prev) => ({ ...prev, isOpen: true, status: "verifying" }));
+						const verifyResponse = await verify({ ...response });
+						const { success, message: msg } = verifyResponse || {};
+						if (success) {
+							message.success("Order Sucessfull");
+							setInfo((prev) => ({
+								...prev,
+								status: "success",
+							}));
+							setTimeout(() => {
+								setInfo((prev) => ({
+									...prev,
+									status: "verifying",
+									isOpen: false,
+								}));
+							}, 5000);
+						} else {
+							message.error(msg || "Something went wrong");
+							setInfo((prev) => ({
+								...prev,
+								status: "failed",
+							}));
+							setTimeout(() => {
+								setInfo((prev) => ({ ...prev, isOpen: false }));
+							}, 5000);
+						}
+					} catch (error) {
+						console.log("error==>verify", error);
+						setTimeout(() => {
+							setInfo((prev) => ({ ...prev, isOpen: false }));
+						}, 5000);
+					}
+				},
+			};
+
+			const rzp = new window.Razorpay(options);
+			rzp.open();
+
+			setInfo((prev) => ({ ...prev, loadingCheckout: true }));
 		} catch (error) {
 			console.error("Checkout Failed:", error);
 			message.error("Could not initiate checkout.");
 		} finally {
-			setLoadingCheckout(false);
+			setInfo((prev) => ({ ...prev, loadingCheckout: false }));
 		}
 	};
 
@@ -191,6 +252,11 @@ const Ecommerce = () => {
 					</Card>
 				</div>
 			</div>
+			<PaymentVerifyModal
+				isOpen={info?.isOpen}
+				status={info?.status}
+				onClose={handleClose}
+			/>
 		</div>
 	);
 };
