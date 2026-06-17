@@ -9,9 +9,9 @@ export default function PaymentVerifyModal({ isOpen, status, onClose }) {
 		<Modal
 			open={isOpen}
 			footer={null}
-			closable={status !== "verifying"} 
+			closable={status !== "verifying"}
 			centered
-			destroyOnClose
+			destroyOnHidden
 		>
 			<div style={{ padding: "24px 0", textAlign: "center" }}>
 				{status === "verifying" && (
@@ -30,7 +30,6 @@ export default function PaymentVerifyModal({ isOpen, status, onClose }) {
 						status="success"
 						title="Payment Verified Successfully!"
 						subTitle="Your access to the FullStackLife course platform has been unlocked."
-					
 					/>
 				)}
 
