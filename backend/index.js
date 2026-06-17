@@ -3,6 +3,7 @@ import cors from "cors";
 import { handleBetterAuth } from "./src/config/auth.js";
 import { toNodeHandler } from "better-auth/node";
 import ecommerceRoute from "./src/routes/ecommerceRoute.js";
+import { handleRazorpayWebhook } from "./src/controllers/ecommerceController.js";
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -12,6 +13,11 @@ app.use(
 		origin: ["http://localhost:3000"],
 		credentials: true,
 	})
+);
+app.use(
+	"/api/webhook/razorpay",
+	express.raw({ type: "application/json" }),
+	handleRazorpayWebhook
 );
 
 app.use(express.json());

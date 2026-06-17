@@ -340,3 +340,63 @@ export const verifySubscription = async (req, res) => {
 		});
 	}
 };
+
+export const handleRazorpayWebhook = async (req, res) => {
+	try {
+		const webhookSignature = req.headers["x-razorpay-signature"];
+		const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
+		console.log("hello therre", webhookSecret);
+		const expectedSignature = crypto
+			.createHmac("sha256", webhookSecret)
+			.update(req.body)
+			.digest("hex");
+
+		if (expectedSignature !== webhookSignature) {
+			console.error("🚨 CRITICAL: Invalid Webhook Signature Detected.");
+			return res.status(400).send("Invalid signature");
+		}
+
+		const payload = JSON.parse(req.body.toString());
+		const event = payload.event;
+
+		switch (event) {
+			case "subscription.charged": {
+				console.log("I reached herer==>", payload);
+				const subscriptionEntity = payload.payload.subscription.entity;
+
+				await Subscription.findOneAndUpdate(
+					{ razorpaySubscriptionId: subscriptionEntity.id },
+					{
+						status: "active",
+						currentPeriodEnd: new Date(subscriptionEntity.current_end * 1000),
+					}
+				);
+
+				break;
+			}
+
+			case "subscription.halted":
+			case "subscription.cancelled": {
+				// The user's card failed too many times, or they cancelled
+				const subscriptionEntity = payload.payload.subscription.entity;
+
+				await Subscription.findOneAndUpdate(
+					{ razorpaySubscriptionId: subscriptionEntity.id },
+					{ status: event.split(".")[1] } // sets status to 'halted' or 'cancelled'
+				);
+				console.log(
+					`❌ Subscription ${subscriptionEntity.id} has been ${event}. Access revoked.`
+				);
+				break;
+			}
+
+			default:
+				console.log(`Unhandled webhook event: ${event}`);
+		}
+
+		return res.status(200).json({ received: true });
+	} catch (error) {
+		console.error("[Webhook Error]:", error);
+		return res.status(500).send("Webhook handler failed");
+	}
+};
