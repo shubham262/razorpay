@@ -1,8 +1,8 @@
 import razorpay from "../config/razorpay.js";
-import { seedProducts } from "../constants/index.js";
+import { seedPlans, seedProducts } from "../constants/index.js";
 import db from "../models/index.js";
 import crypto from "crypto";
-const { Product, Order } = db;
+const { Product, Order, Subscription, Plan } = db;
 
 export const seedProductsController = async (req, res) => {
 	try {
@@ -165,6 +165,177 @@ export const verifyPayment = async (req, res) => {
 		return res.status(500).json({
 			success: false,
 			error: "Failed to create checkout",
+			details: error.message,
+		});
+	}
+};
+
+export const seedPlansController = async (req, res) => {
+	try {
+		const seededPlan = await Plan.insertMany(seedPlans);
+
+		return res.status(201).json({
+			success: true,
+			message: "Database successfully seeded with PW curriculum.",
+			count: seededPlan.length,
+			data: seededPlan,
+		});
+	} catch (error) {
+		console.error("[seedPlansController] Critical Error:", error);
+
+		return res.status(500).json({
+			success: false,
+			error: "Failed to seed products",
+			details: error.message,
+		});
+	}
+};
+export const fetchAllPlans = async (req, res) => {
+	try {
+		const plans = await Plan.find();
+		return res.status(201).json({
+			success: true,
+			message: "Fetch all Plans successfully",
+			plans,
+		});
+	} catch (error) {
+		console.error("[fetchAllPlans] Critical Error:", error);
+
+		return res.status(500).json({
+			success: false,
+			error: "Failed to fetch plans",
+			details: error.message,
+		});
+	}
+};
+
+export const createRazorpaySubscriptionController = async (req, res) => {
+	try {
+		const userId = req.user.id;
+		const { planId, interval } = req.body;
+
+		if (!planId || !interval) {
+			return res
+				.status(400)
+				.json({ message: "Plan ID and interval are required" });
+		}
+
+		const dbPlan = await Plan.findById(planId);
+		if (!dbPlan) {
+			return res.status(404).json({ message: "Plan not found" });
+		}
+
+		const pricingOption = dbPlan.pricingOptions.find(
+			(opt) => opt.interval === interval
+		);
+		if (!pricingOption) {
+			return res.status(400).json({
+				message: `Pricing for interval '${interval}' not found on this plan.`,
+			});
+		}
+
+		const totalCount = interval === "month" ? 120 : 10;
+
+		const subscriptionOptions = {
+			plan_id: pricingOption.razorpayPlanId,
+			total_count: totalCount,
+			customer_notify: 0,
+		};
+
+		const razorpaySubscription = await razorpay.subscriptions.create(
+			subscriptionOptions
+		);
+
+		const newSubscription = await Subscription.create({
+			userId,
+			planId: dbPlan._id,
+			razorpaySubscriptionId: razorpaySubscription.id,
+			status: "created",
+		});
+
+		return res.status(201).json({
+			success: true,
+			message: "Subscription created successfully",
+			subscription_id: razorpaySubscription.id,
+			dbSubscriptionId: newSubscription._id,
+			name: dbPlan?.name,
+			description: interval === "month" ? "Monthly Access" : "Yearly Access",
+		});
+	} catch (error) {
+		console.error(
+			"[createRazorpaySubscriptionController] Critical Error:",
+			error
+		);
+		return res.status(500).json({
+			success: false,
+			error: "Failed to create subscription",
+			details: error.message,
+		});
+	}
+};
+
+export const verifySubscription = async (req, res) => {
+	try {
+		// 1. Extract the subscription-specific payload from the frontend handler
+		const {
+			razorpay_payment_id,
+			razorpay_subscription_id,
+			razorpay_signature,
+		} = req.body;
+
+		// 2. Parameter Validation
+		if (
+			!razorpay_payment_id ||
+			!razorpay_subscription_id ||
+			!razorpay_signature
+		) {
+			return res.status(400).json({
+				success: false,
+				error: "Missing required Razorpay parameters for subscription",
+			});
+		}
+
+		const data = razorpay_payment_id + "|" + razorpay_subscription_id;
+
+		const expectedSignature = crypto
+			.createHmac("sha256", process.env.RAZORPAY_SECRET_KEY)
+			.update(data.toString())
+			.digest("hex");
+
+		const isAuthentic = expectedSignature === razorpay_signature;
+
+		if (!isAuthentic) {
+			return res.status(400).json({
+				success: false,
+				error: "Invalid subscription signature. Transaction validation failed.",
+			});
+		}
+
+		const subscription = await Subscription.findOneAndUpdate(
+			{ razorpaySubscriptionId: razorpay_subscription_id },
+			{
+				status: "active",
+			},
+			{ returnDocument: "after" }
+		);
+
+		if (!subscription) {
+			return res.status(404).json({
+				success: false,
+				error: "Subscription record not found in the database",
+			});
+		}
+
+		return res.status(200).json({
+			success: true,
+			message: "Subscription successfully verified and activated",
+			subscription,
+		});
+	} catch (error) {
+		console.error("[verifySubscription] Critical Error:", error);
+		return res.status(500).json({
+			success: false,
+			error: "Failed to verify subscription",
 			details: error.message,
 		});
 	}

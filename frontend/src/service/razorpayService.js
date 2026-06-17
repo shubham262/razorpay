@@ -47,6 +47,18 @@ export const verify = async (payload) => {
 	}
 };
 
+export const verifySubscription = async (payload) => {
+	try {
+		const { data } = await api.post(
+			`/api/ecommerce/verify-subscription`,
+			payload
+		);
+		return data;
+	} catch (error) {
+		throw error;
+	}
+};
+
 export const subscribe = async (payload) => {
 	try {
 		const { data } = await api.post(

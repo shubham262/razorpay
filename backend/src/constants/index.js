@@ -27,3 +27,51 @@ export const seedProducts = [
 		active: true,
 	},
 ];
+
+export const seedPlans = [
+	{
+		name: "PW BASIC",
+		description: "Fundamental access to the curriculum.",
+		features: ["Standard Course Access", "Community Support"],
+		active: true,
+		pricingOptions: [
+			{
+				interval: "month",
+				price: 1500,
+				currency: "inr",
+				razorpayPlanId: "plan_T2cICwfpFGusSk", // Extracted from your screenshot
+			},
+			{
+				interval: "year",
+				price: 12000,
+				currency: "inr",
+				razorpayPlanId: "plan_T2cIXmzN1Pm8Wf", // Extracted from your screenshot
+			},
+		],
+	},
+	{
+		name: "PW PRO",
+		description: "Advanced access with premium mentorship.",
+		features: [
+			"Standard Course Access",
+			"Community Support",
+			"1-on-1 Mentorship",
+			"System Design Mock Interviews",
+		],
+		active: true,
+		pricingOptions: [
+			{
+				interval: "month",
+				price: 2500,
+				currency: "inr",
+				razorpayPlanId: "plan_T2cGkapNxr4WsK", // Extracted from your screenshot
+			},
+			{
+				interval: "year",
+				price: 24000,
+				currency: "inr",
+				razorpayPlanId: "plan_T2cHeDgSrlKXaj", // Extracted from your screenshot
+			},
+		],
+	},
+];
