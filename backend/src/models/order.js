@@ -66,7 +66,7 @@ const orderSchema = new mongoose.Schema(
 		currency: {
 			type: String,
 			required: true,
-			default: "usd",
+			default: "inr",
 			trim: true,
 		},
 		status: {
@@ -75,12 +75,16 @@ const orderSchema = new mongoose.Schema(
 			default: "pending",
 			index: true,
 		},
-		stripePaymentIntentId: {
+
+		razorpayOrderId: {
 			type: String,
 			unique: true,
 			sparse: true,
 		},
-		stripePaymentIntentStatus: {
+		razorpayPaymentId: {
+			type: String,
+		},
+		razorpaySignature: {
 			type: String,
 		},
 		paidAt: {

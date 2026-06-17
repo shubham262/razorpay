@@ -1,5 +1,7 @@
+import razorpay from "../config/razorpay.js";
 import { seedProducts } from "../constants/index.js";
 import db from "../models/index.js";
+import crypto from "crypto";
 const { Product, Order } = db;
 
 export const seedProductsController = async (req, res) => {
@@ -54,8 +56,8 @@ export const createCheckoutSessionController = async (req, res) => {
 		}
 
 		const orderSnapShot = [];
-		let amountInCents = 0;
-		const lineItems = [];
+		let amountInPaise = 0;
+
 		for (const item of items) {
 			const product = await Product.findById(item?._id);
 			if (!product) {
@@ -64,18 +66,8 @@ export const createCheckoutSessionController = async (req, res) => {
 				});
 			}
 
-			amountInCents += product.price || 0;
-			lineItems.push({
-				quantity: 1,
-				price_data: {
-					currency: product.currency,
-					product_data: {
-						name: product?.name,
-						description: product?.description,
-					},
-					unit_amount: product?.price,
-				},
-			});
+			amountInPaise += product.price || 0;
+
 			orderSnapShot.push({
 				productId: product?._id,
 				name: product?.name,
@@ -86,36 +78,90 @@ export const createCheckoutSessionController = async (req, res) => {
 				currency: product.currency,
 			});
 		}
+		const razorpayOptions = {
+			amount: amountInPaise,
+			currency: "INR",
+			receipt: `rcpt_${userId.substring(0, 5)}_${Date.now()}`,
+		};
 
-		const session = await stripe.checkout.sessions.create({
-			success_url: `http://localhost:3000/dashboard/success?sessionId={CHECKOUT_SESSION_ID}`,
-			cancel_url: "http://localhost:3000/dashboard/ecommerce",
-			line_items: lineItems,
-			mode: "payment",
-			metadata: {
-				userId: userId.toString(),
-			},
-			allow_promotion_codes: true,
-		});
-
+		const razorpayOrder = await razorpay.orders.create(razorpayOptions);
 		const order = await Order.create({
 			userId,
 			items: orderSnapShot,
-			subtotalAmount: amountInCents,
-			totalAmount: amountInCents,
+			subtotalAmount: amountInPaise,
+			totalAmount: amountInPaise,
 			currency: "inr",
 			status: "pending",
-			stripePaymentIntentId: session.id,
+			razorpayOrderId: razorpayOrder.id,
 		});
 
 		return res.status(201).json({
-			url: session?.url || "",
-			message: "Order created",
-			order,
+			success: true,
+			message: "Razorpay Order created successfully",
+			order_id: razorpayOrder.id,
+			amount: amountInPaise,
+			currency: "INR",
+			dbOrderId: order._id,
 		});
 	} catch (error) {
 		console.error("[createCheckoutSessionController] Critical Error:", error);
 
+		return res.status(500).json({
+			success: false,
+			error: "Failed to create checkout",
+			details: error.message,
+		});
+	}
+};
+
+export const verifyPayment = async (req, res) => {
+	try {
+		const { razorpay_order_id, razorpay_payment_id, razorpay_signature } =
+			req.body;
+
+		if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+			return res.status(400).json({
+				success: false,
+				error: "Missing required Razorpay parameters",
+			});
+		}
+
+		const data = razorpay_order_id + "|" + razorpay_payment_id;
+		const expectedSignature = crypto
+			.createHmac("sha256", process.env.RAZORPAY_SECRET_KEY)
+			.update(data.toString())
+			.digest("hex");
+
+		const isAuthentic = expectedSignature === razorpay_signature;
+		if (!isAuthentic) {
+			return res.status(400).json({
+				success: false,
+				error: "Invalid payment signature. Transaction validation failed.",
+			});
+		}
+
+		const order = await Order.findOneAndUpdate(
+			{ razorpayOrderId: razorpay_order_id },
+			{
+				status: "paid",
+				razorpayPaymentId: razorpay_payment_id,
+				paidAt: new Date(),
+			},
+			{ returnDocument: "after" }
+		);
+		if (!order) {
+			return res.status(404).json({
+				success: false,
+				error: "Order record not found in the database",
+			});
+		}
+		return res.status(200).json({
+			success: true,
+			message: "Payment successfully verified and order updated",
+			order,
+		});
+	} catch (error) {
+		console.error("[verifyPayment] Critical Error:", error);
 		return res.status(500).json({
 			success: false,
 			error: "Failed to create checkout",

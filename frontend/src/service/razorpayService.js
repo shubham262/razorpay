@@ -38,6 +38,15 @@ export const checkout = async (payload) => {
 	}
 };
 
+export const verify = async (payload) => {
+	try {
+		const { data } = await api.post(`/api/ecommerce/verify-payment`, payload);
+		return data;
+	} catch (error) {
+		throw error;
+	}
+};
+
 export const subscribe = async (payload) => {
 	try {
 		const { data } = await api.post(
