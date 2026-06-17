@@ -10,7 +10,6 @@ const router = express.Router();
 
 router.post("/seed", seedProductsController);
 router.get("/products", fetchAllProductsController);
-
 router.post("/create-checkout", checkUserAuth, createCheckoutSessionController);
 
 export default router;

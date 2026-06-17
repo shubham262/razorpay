@@ -54,8 +54,8 @@ export const createCheckoutSessionController = async (req, res) => {
 		}
 
 		const orderSnapShot = [];
-		let amountInCents = 0;
-		const lineItems = [];
+		let amountInPaise = 0;
+
 		for (const item of items) {
 			const product = await Product.findById(item?._id);
 			if (!product) {
@@ -64,18 +64,8 @@ export const createCheckoutSessionController = async (req, res) => {
 				});
 			}
 
-			amountInCents += product.price || 0;
-			lineItems.push({
-				quantity: 1,
-				price_data: {
-					currency: product.currency,
-					product_data: {
-						name: product?.name,
-						description: product?.description,
-					},
-					unit_amount: product?.price,
-				},
-			});
+			amountInPaise += product.price || 0;
+
 			orderSnapShot.push({
 				productId: product?._id,
 				name: product?.name,
@@ -87,31 +77,9 @@ export const createCheckoutSessionController = async (req, res) => {
 			});
 		}
 
-		const session = await stripe.checkout.sessions.create({
-			success_url: `http://localhost:3000/dashboard/success?sessionId={CHECKOUT_SESSION_ID}`,
-			cancel_url: "http://localhost:3000/dashboard/ecommerce",
-			line_items: lineItems,
-			mode: "payment",
-			metadata: {
-				userId: userId.toString(),
-			},
-			allow_promotion_codes: true,
-		});
-
-		const order = await Order.create({
-			userId,
-			items: orderSnapShot,
-			subtotalAmount: amountInCents,
-			totalAmount: amountInCents,
-			currency: "inr",
-			status: "pending",
-			stripePaymentIntentId: session.id,
-		});
-
 		return res.status(201).json({
 			url: session?.url || "",
 			message: "Order created",
-			order,
 		});
 	} catch (error) {
 		console.error("[createCheckoutSessionController] Critical Error:", error);
